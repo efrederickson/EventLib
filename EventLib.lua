@@ -35,6 +35,12 @@
 --     aliases: spawn
 --     returns: the result of func
 --     notes: runs func in a separate coroutine/thread
+--   Destroy(event)
+--     aliases: destroy, Remove, remove
+--     notes: renders the event completely useless
+--   WaitForCompletion(event)
+--     notes: blocks current thread until the current event Fire() is done
+--       If a connected function calls WaitForCompletion, it will hang forever
 --   
 -- Event
 --   [All EventLib functions]
@@ -64,7 +70,10 @@
 
 --[[
 Issues:
-None
+- None, but see [Todo 1]
+
+Todo:
+- fix Wait() for non-roblox clients...
 
 Changelog:
 
@@ -88,17 +97,21 @@ _M.Spawn = spawn
 _M.spawn = spawn
 
 function _M:new(name)
+    assert(self ~= nil and type(self) == "table" and self == _M, "Invalid EventLib table (make sure you're using ':' not '.')")
     local s = { }
     s.handlers = { }
     s._waiter = false
     s._waiters = { }
     s.args = nil
     s.EventName = name or "<Unknown Event>"
+    s.executing = false
     return setmetatable(s, { __index = self })
 end
 _M.CreateEvent = _M.new
 
 function _M:Connect(handler)
+    assert(self ~= nil and type(self) == "table", "Invalid Event (make sure you're using ':' not '.')")
+    assert(type(handler) == "function", "Invalid handler. Expected function got " .. type(handler))
     table.insert(self.handlers, handler)
     local t = { }
     t.Disconnect = function()
@@ -110,6 +123,8 @@ end
 _M.connect = _M.Connect
 
 function _M:Disconnect(handler)
+    assert(self ~= nil and type(self) == "table", "Invalid Event (make sure you're using ':' not '.')")
+    assert(type(handler) == "function" or type(handler) == "nil", "Invalid handler. Expected function or nil, got " .. type(handler))
     if not handler then
         self.handlers = { }
     else
@@ -124,10 +139,13 @@ end
 _M.disconnect = _M.Disconnect
 
 function _M:DisconnectAll()
+    assert(self ~= nil and type(self) == "table", "Invalid Event (make sure you're using ':' not '.')")
     self:Disconnect()
 end
 
 function _M:Fire(...)
+    assert(self ~= nil and type(self) == "table", "Invalid Event (make sure you're using ':' not '.')")
+    self.executing = true
     self.args = { ... }
     if self._waiter then
         self._waiter = false
@@ -135,44 +153,99 @@ function _M:Fire(...)
             coroutine.resume(v)
         end
     end
+    local i = 0
     for k, v in pairs(self.handlers) do
-        spawn(function() v(unpack(self.args)) end)
+        i = i + 1
+        spawn(function() 
+            v(unpack(self.args)) 
+            i = i - 1
+            if i == 0 then self.executing = false end
+        end)
     end
     self.args = nil
+    --self.executing = false
 end
 _M.Simulate = _M.Fire
 _M.fire = _M.Fire
 
 function _M:Wait()
+    assert(self ~= nil and type(self) == "table", "Invalid Event (make sure you're using ':' not '.')")
     self._waiter = true
-    table.insert(self._waiters, coroutine.create(function()
+    
+    --[[
+    local c = coroutine.create(function()
         coroutine.yield()
         return unpack(self.args)
-    end))
+    end)
+    
+    table.insert(self._waiters, c)
+    coroutine.resume(c)
+    ]]
+    
+    while self._waiter do end
+    return unpack(self.args)
 end
 _M.wait = _M.Wait
 
 function _M:ConnectionCount()
+    assert(self ~= nil and type(self) == "table", "Invalid Event (make sure you're using ':' not '.')")
     return #self.handlers
 end
 
+function _M:Destroy()
+    assert(self ~= nil and type(self) == "table", "Invalid Event (make sure you're using ':' not '.')")
+    self:DisconnectAll()
+    for k, v in pairs(self) do
+        self[k] = nil
+    end
+    setmetatable(self, { })
+end
+_M.destroy = _M.Destroy
+_M.Remove = _M.Destroy
+_M.remove = _M.Destroy
+
+function _M:WaitForCompletion()
+    assert(self ~= nil and type(self) == "table", "Invalid Event (make sure you're using ':' not '.')")
+    while self.executing do end
+end
+
 -- Tests
-if false then
+if true then
     local e = _M:new("test")
     local f = function(...) print("| Fired!", ...) end
     local e2 = e:connect(f)
     e:fire("arg1", 5, { })
-    spawn(function() e:wait(5) print"|- done waiting!" end)
+    -- Would work in a ROBLOX Script, but not on Lua 5.1...
+    --spawn(function() print("Wait() results", e:wait()) print"|- done waiting!" end)
     e:fire(nil, "x")
     print("Disconnected events index:", e:disconnect(f))
     print("Couldn't disconnect an already disconnected handler?", e2:disconnect()==nil)
     print("Connections:", e:ConnectionCount())
     assert(e:ConnectionCount() == 0 and e:ConnectionCount() == #e.handlers)
     e:connect(f)
+    e:connect(function() print"Throwing error... " error("...") end)
+    e:fire("Testing throwing an error...")
     e:disconnect()
     e:Simulate()
     f("plain function call")
     assert(e:ConnectionCount() == 0)
+    
+    if wait then
+        e:connect(function() wait(2, true) print'fired after waiting' end)
+        e:Fire()
+        e:WaitForCompletion()
+        print'Done!'
+    end
+    
+    local failhorribly = false
+    if failhorribly then -- causes an eternal loop in the WaitForCompletion call
+        e:connect(function() e:WaitForCompletion() print'done with connected function' end)
+        e:Fire()
+        print'done'
+    end
+    
+    e:Destroy()
+    assert(not e.EventName and not e.Fire and not e.Connect)
 end
 
 if shared and Instance then -- ROBLOX support
