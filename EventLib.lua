@@ -215,8 +215,10 @@ if true then
     local f = function(...) print("| Fired!", ...) end
     local e2 = e:connect(f)
     e:fire("arg1", 5, { })
-    -- Would work in a ROBLOX Script, but not on Lua 5.1...
-    --spawn(function() print("Wait() results", e:wait()) print"|- done waiting!" end)
+    -- Would work in a ROBLOX Script, but not on Lua 5.1... so we test it.
+    if script ~= nil then
+        spawn(function() print("Wait() results", e:wait()) print"|- done waiting!" end)
+    end
     e:fire(nil, "x")
     print("Disconnected events index:", e:disconnect(f))
     print("Couldn't disconnect an already disconnected handler?", e2:disconnect()==nil)

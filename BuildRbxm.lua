@@ -13,7 +13,7 @@ local source2 = [[<roblox xmlns:xmime="http://www.w3.org/2005/05/xmlmime" xmlns:
 			<bool name="Archivable">true</bool>
 			<bool name="Disabled">false</bool>
 			<Content name="LinkedSource"><null></null></Content>
-			<string name="Name">XMLParser</string>
+			<string name="Name">EventLib</string>
 			<ProtectedString name="Source">]] .. source .. [[</ProtectedString>
            			</Properties>
 		</Item>
