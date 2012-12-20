@@ -1,11 +1,14 @@
 -- EventLib - An event library in pure lua (uses standard coroutine library)
+-- License: WTFPL
+-- Author: Elijah Frederickson
+-- Version: 1.0
+-- Copyright (C) 2012 LoDC
 -- 
+-- Description:
 -- ROBLOX has an event library in its RbxUtility library, but it isn't pure Lua. 
 -- It originally used a BoolValue but now uses BindableEvent. I wanted to write
 -- it in pure Lua, so here it is. It also contains some new features.
 -- 
--- Version: 1.0
--- Copyright (C) 2012 LoDC
 -- 
 -- API:
 -- 
