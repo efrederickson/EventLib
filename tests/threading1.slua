@@ -1,0 +1,8 @@
+local el = require'EventLib'
+e = el:new()
+
+el.spawn(function() dofile'tests/threading2.slua' end)
+wait(1, true)
+print"Firing test..."
+e:Fire("test")
+print'Done: threading1'

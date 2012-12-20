@@ -1,0 +1,5 @@
+if not e then print"No Event :(" end
+
+e:connect(function() print"Fired!" end)
+e:wait()
+print"Done: threading2"
