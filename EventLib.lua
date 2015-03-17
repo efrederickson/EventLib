@@ -26,7 +26,7 @@
 --   DisconnectAll(event)
 --     notes: calls Disconnect()
 --   Fire(event, ... <args>)
---     aliases: Simulate, fire
+--     aliases: Simulate, fire, simply calling the table
 --     notes: resumes all :wait() first
 --   Wait(event)
 --     aliases: wait
@@ -80,12 +80,17 @@
 
 --[[
 Issues:
-- None, but see [Todo 1]
+- None
 
 Todo:
-- fix Wait() for non-roblox clients without a wait function...
 
 Changelog:
+
+v1.1
+- Added metamethod for __call on events to trigger the Fire() method
+- Formatted asserts away from the rest of the function
+- Added a pseudo-wait function for environments that don't already have one
+- Improved Disconnect() to accept the tables returned by Connect()
 
 v1.0
 - Initial version
@@ -93,10 +98,10 @@ v1.0
 ]]
 
 local _M = { }
-_M._VERSION = "1.0"
+_M._VERSION = "1.1"
 _M._M = _M
 _M._AUTHOR = "Elijah Frederickson"
-_M._COPYRIGHT = "Copyright (C) 2012 LoDC"
+_M._COPYRIGHT = "Copyright (C) 2012-2015 Elijah Frederickson"
 
 local function spawn(f)
     return coroutine.resume(coroutine.create(function()
@@ -106,8 +111,26 @@ end
 _M.Spawn = spawn
 _M.spawn = spawn
 
+local function _wait(...)
+    if wait then
+        return wait(...)
+    end
+
+    local waitTime = ({ ... })[1] or 0
+
+    local t1 = os.time()
+    while true do
+        local t2 = os.time()
+        if t2 - t1 >= waitTime then
+            return t2 - t1
+        end
+    end
+end
+_M._wait = _wait
+
 function _M:new(name)
     assert(self ~= nil and type(self) == "table" and self == _M, "Invalid EventLib table (make sure you're using ':' not '.')")
+
     local s = { }
     s.handlers = { }
     s.waiter = false
@@ -115,7 +138,7 @@ function _M:new(name)
     s.waiters = 0
     s.EventName = name or "<Unknown Event>"
     s.executing = false
-    return setmetatable(s, { __index = self })
+    return setmetatable(s, { __index = self, __call = function(t, ...) return t:fire(...) end })
 end
 _M.CreateEvent = _M.new
 
@@ -123,8 +146,10 @@ function _M:Connect(handler)
     assert(self ~= nil and type(self) == "table", "Invalid Event (make sure you're using ':' not '.')")
     assert(type(handler) == "function", "Invalid handler. Expected function got " .. type(handler))
     assert(self.handlers, "Invalid Event")
+
     table.insert(self.handlers, handler)
     local t = { }
+    t.func = handler
     t.Disconnect = function()
         return self:Disconnect(handler)
     end
@@ -135,12 +160,13 @@ _M.connect = _M.Connect
 
 function _M:Disconnect(handler)
     assert(self ~= nil and type(self) == "table", "Invalid Event (make sure you're using ':' not '.')")
-    assert(type(handler) == "function" or type(handler) == "nil", "Invalid handler. Expected function or nil, got " .. type(handler))
+    assert(type(handler) == "function" or type(handler) == "nil" or type(handler) == "table", "Invalid handler. Expected function, table, or nil, got " .. type(handler))
+
     if not handler then
         self.handlers = { }
     else
         for k, v in pairs(self.handlers) do
-            if v == handler then
+            if v ==  (type(handler) == "table" and handler.func or handler) then
                 self.handlers[k] = nil
                 return k
             end
@@ -151,23 +177,19 @@ _M.disconnect = _M.Disconnect
 
 function _M:DisconnectAll()
     assert(self ~= nil and type(self) == "table", "Invalid Event (make sure you're using ':' not '.')")
-    self:Disconnect()
+
+    return self:Disconnect()
 end
 
 function _M:Fire(...)
     assert(self ~= nil and type(self) == "table", "Invalid Event (make sure you're using ':' not '.')")
+    assert(self.handlers, "Invalid Event: No handler table")
+
     self.args = { ... }
     self.executing = true
-    --[[
-    if self.waiter then
-        self.waiter = false
-        for k, v in pairs(self.waiters) do
-            coroutine.resume(v)
-        end
-    end]]
     self.waiter = false
     local i = 0
-assert(self.handlers, "no handler table")
+
     for k, v in pairs(self.handlers) do
         i = i + 1
         spawn(function() 
@@ -185,19 +207,12 @@ _M.fire = _M.Fire
 
 function _M:Wait()
     assert(self ~= nil and type(self) == "table", "Invalid Event (make sure you're using ':' not '.')")
+
     self.waiter = true
     self.waiters = self.waiters + 1
-    --[[
-    local c = coroutine.create(function()
-        coroutine.yield()
-        return unpack(self.args)
-    end)
-    
-    table.insert(self.waiters, c)
-    coroutine.resume(c)
-    ]]
-    
-    while self.waiter or not self.args do if wait then wait() end end
+
+    while self.waiter or not self.args do self._wait(1) end
+
     self.waiters = self.waiters - 1
     return unpack(self.args)
 end
@@ -205,11 +220,13 @@ _M.wait = _M.Wait
 
 function _M:ConnectionCount()
     assert(self ~= nil and type(self) == "table", "Invalid Event (make sure you're using ':' not '.')")
+
     return #self.handlers
 end
 
 function _M:Destroy()
     assert(self ~= nil and type(self) == "table", "Invalid Event (make sure you're using ':' not '.')")
+
     self:DisconnectAll()
     for k, v in pairs(self) do
         self[k] = nil
@@ -222,18 +239,21 @@ _M.remove = _M.Destroy
 
 function _M:WaitForCompletion()
     assert(self ~= nil and type(self) == "table", "Invalid Event (make sure you're using ':' not '.')")
-    while self.executing do if wait then wait() end end
-    while self.waiters > 0 do if wait then wait() end end
+
+    while self.executing do self._wait(1) end
+    while self.waiters > 0 do self._wait(1) end
 end
 
 function _M:IsWaiting()
     assert(self ~= nil and type(self) == "table", "Invalid Event (make sure you're using ':' not '.')")
+
     return self.waiter or self.waiters > 0
 end
 
 function _M:WaitForWaiters()
     assert(self ~= nil and type(self) == "table", "Invalid Event (make sure you're using ':' not '.')")
-    while self.waiters > 0 do if wait then wait() end end
+
+    while self.waiters > 0 do self._wait(1) end
 end
 
 -- Tests
