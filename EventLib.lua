@@ -103,6 +103,8 @@ _M._M = _M
 _M._AUTHOR = "Elijah Frederickson"
 _M._COPYRIGHT = "Copyright (C) 2012-2015 Elijah Frederickson"
 
+local unpack = unpack or table.unpack
+
 local function spawn(f)
     return coroutine.resume(coroutine.create(function()
         f()
